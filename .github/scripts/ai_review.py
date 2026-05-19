@@ -1,8 +1,10 @@
 import os
 import sys
+import time
 import requests
 from google import genai
 from google.genai import types
+from google.genai.errors import APIError
 
 def get_changed_files(repo, pr_number, token):
     """Lấy danh sách các file và nội dung thay đổi trong PR"""
@@ -27,8 +29,46 @@ def post_comment(repo, pr_number, token, body):
     response = requests.post(url, headers=headers, json={"body": body})
     return response.status_code == 201
 
+def call_gemini_with_retry(client, prompt, retries=3, delay=2):
+    """Gói gọi Gemini API với cơ chế nhận diện lỗi 503/429 chính xác để retry"""
+    for attempt in range(retries):
+        try:
+            response = client.models.generate_content(
+                model='gemini-2.5-flash',
+                contents=prompt,
+            )
+            return response.text.strip(), True
+            
+        except APIError as e:
+            # Lấy thông tin lỗi dưới dạng chuỗi để check cho chắc chắn
+            err_code = str(getattr(e, 'code', '') or '')
+            err_status = str(getattr(e, 'status', '') or '').upper()
+            err_message = str(e.message or '').upper()
+            
+            # Kiểm tra xem có phải lỗi quá tải/bận không (503, 429, UNAVAILABLE, RESOURCE_EXHAUSTED)
+            is_overloaded = (
+                "503" in err_code or 
+                "429" in err_code or 
+                "UNAVAILABLE" in err_status or 
+                "RESOURCE_EXHAUSTED" in err_status or
+                "TEMPORARY" in err_message
+            )
+            
+            if is_overloaded and attempt < retries - 1:
+                print(f"Gemini API đang bận (Status: {err_status or err_code}). Thử lại sau {delay} giây... (Lần {attempt + 1}/{retries})")
+                time.sleep(delay)
+                delay *= 2
+                continue  # Tiếp tục vòng lặp để thử lại
+                
+            # Nếu là lỗi khác (như 400, 403) hoặc đã hết lượt thử lại
+            return f"Lỗi API ({err_status or err_code}): {e.message}", False
+            
+        except Exception as e:
+            return f"Lỗi hệ thống: {str(e)}", False
+            
+    return "Hết lượt thử lại do API quá tải.", False
+
 def main():
-    # Đọc các biến môi trường từ GitHub Action
     api_key = os.getenv("GEMINI_API_KEY")
     github_token = os.getenv("GITHUB_TOKEN")
     repo = os.getenv("REPOSITORY")
@@ -38,28 +78,25 @@ def main():
         print("Thiếu GEMINI_API_KEY")
         sys.exit(1)
 
-    # Khởi tạo Gemini Client (Sử dụng SDK mới nhất `google-genai`)
     client = genai.Client(api_key=api_key)
-    
-    # Lấy các file thay đổi
     files = get_changed_files(repo, pr_number, github_token)
     
     review_results = "### 🤖 AI Code Review - Coding Convention\n\n"
     has_suggestions = False
+    has_errors = False
+    error_details = ""
 
     for file in files:
         filename = file['filename']
-        # Bỏ qua các file cấu hình, lock file nếu cần thiết
         if filename.endswith(('json', 'md', 'lock', 'yml', 'yaml')):
             continue
             
-        patch = file.get('patch') # Đoạn code thay đổi (diff)
+        patch = file.get('patch')
         if not patch:
             continue
 
-        # Định nghĩa Prompt cho Gemini
         prompt = f"""
-        Bạn là một Tech Lead nghiêm túc và giàu kinh nghiệm. Hãy kiểm tra đoạn code thay đổi (diff) dưới đây của file `{filename}` xem có vi phạm coding convention tiêu chuẩn của ngôn ngữ đó không (ví dụ: PEP8 cho Python, Clean Code, đặt tên biến, cấu trúc hàm, comment...).
+        Bạn là một Tech Lead nghiêm túc và giàu kinh nghiệm. Hãy kiểm tra đoạn code thay đổi (diff) dưới đây của file `{filename}` xem có vi phạm coding convention tiêu chuẩn của ngôn ngữ đó không (ví dụ: Clean Code, đặt tên biến, cấu trúc hàm, comment...).
 
         Nếu có lỗi hoặc điểm cần cải tiến, hãy chỉ rõ:
         1. Vị trí/Dòng code (nếu có).
@@ -69,82 +106,35 @@ def main():
         Nếu đoạn code đã chuẩn convention, chỉ cần trả về đúng từ: "OK".
         coding convention là gì? Đó là những quy tắc và hướng dẫn để viết code sạch, dễ đọc, dễ bảo trì và nhất quán trong một ngôn ngữ lập trình cụ thể. Ví dụ, đối với Python, có PEP8; đối với JavaScript, có Airbnb Style Guide; đối với Java, có Google Java Style Guide... Hãy áp dụng các quy tắc này khi đánh giá đoạn code thay đổi dưới đây:
         theo chuẩn Common Standard Categories for C/C++
-Naming Conventions
-Formatting Conventions
-Style Guide Rules
-Code Layout Rules
-Commenting Standards
-Documentation Standards
-Whitespace Rules
-Indentation Rules
-Brace Style
-Line Breaking Rules
-Header Organization
-Include Order Rules
-Declaration Rules
-Initialization Rules
-Type Usage Rules
-Function Design Rules
-Class Design Rules
-Object Lifetime Rules
-Memory Management Rules
-Pointer Safety Rules
-Const Correctness
-Error Handling Conventions
-Exception Safety Rules
-Resource Management Rules
-Thread Safety Rules
-Concurrency Guidelines
-Macro Usage Rules
-Preprocessor Rules
-API Design Guidelines
-Encapsulation Rules
-Dependency Management Rules
-File Organization Rules
-Build System Conventions
-Testing Conventions
-Logging Conventions
-Security Coding Rules
-Defensive Programming Rules
-Performance Guidelines
-Portability Rules
-Embedded Coding Rules
-Static Analysis Compliance
-Compiler Warning Compliance
-Undefined Behavior Prevention
-Safe Integer Rules
-Synchronization Rules
-Atomic Operation Rules
-Coding Best Practices
-Readability Rules
-Maintainability Rules
-Clean Code Principles
+
+        chu y code review chi can tap trung vao coding convention, khong can review ve logic.
+
         Đoạn code thay đổi:
         ```
         {patch}
         
     """
 
-        try:
-            # Sử dụng model gemini-2.5-flash để tối ưu tốc độ và chi phí
-            response = client.models.generate_content(
-                model='gemini-2.5-flash',
-                contents=prompt,
-            )
-            
-            result = response.text.strip()
+        result, success = call_gemini_with_retry(client, prompt)
+        
+        if success:
             if result != "OK":
                 has_suggestions = True
                 review_results += f"#### 📁 File: `{filename}`\n{result}\n\n---\n"
-        except Exception as e:
-            print(f"Lỗi khi gọi Gemini API cho file {filename}: {e}")
+        else:
+            has_errors = True
+            error_details += f"❌ Không thể review file `{filename}`: {result}\n"
+            print(f"Thất bại khi review {filename}: {result}")
 
-    if has_suggestions:
+    # Xử lý kết quả cuối cùng để post lên PR
+    if has_errors:
+        final_comment = review_results if has_suggestions else "### 🤖 AI Code Review\n\n"
+        final_comment += f"⚠️ **Lưu ý:** Quá trình review gặp một số sự cố gián đoạn:\n{error_details}"
+        post_comment(repo, pr_number, github_token, final_comment)
+    elif has_suggestions:
         post_comment(repo, pr_number, github_token, review_results)
-        print("Đã gửi nhận xét lên PR.")
     else:
         post_comment(repo, pr_number, github_token, "### 🤖 AI Code Review\n\n✅ Tất cả các file thay đổi đều đạt chuẩn coding convention!")
-        print("Code sạch! Không có vi phạm.")
 
 if __name__ == "__main__":
     main()
