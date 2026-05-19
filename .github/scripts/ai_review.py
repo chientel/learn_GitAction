@@ -102,9 +102,13 @@ def main():
         1. Vị trí/Dòng code (nếu có).
         2. Lý do vi phạm.
         3. Cách sửa lại cho đúng.
-
+    
         Nếu đoạn code đã chuẩn convention, chỉ cần trả về đúng từ: "OK".
+        coding convention là gì? Đó là những quy tắc và hướng dẫn để viết code sạch, dễ đọc, dễ bảo trì và nhất quán trong một ngôn ngữ lập trình cụ thể. Ví dụ, đối với Python, có PEP8; đối với JavaScript, có Airbnb Style Guide; đối với Java, có Google Java Style Guide... Hãy áp dụng các quy tắc này khi đánh giá đoạn code thay đổi dưới đây:
+        theo chuẩn Common Standard Categories for C/C++
+
         chu y code review chi can tap trung vao coding convention, khong can review ve logic.
+
         Đoạn code thay đổi:
         ```
         {patch}
