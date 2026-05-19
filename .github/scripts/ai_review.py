@@ -30,7 +30,7 @@ def post_comment(repo, pr_number, token, body):
     return response.status_code == 201
 
 def call_gemini_with_retry(client, prompt, retries=3, delay=2):
-    """Gọi Gemini API kèm cơ chế retry khi gặp lỗi quá tải (503, 429)"""
+    """Gói gọi Gemini API với cơ chế nhận diện lỗi 503/429 chính xác để retry"""
     for attempt in range(retries):
         try:
             response = client.models.generate_content(
@@ -38,16 +38,34 @@ def call_gemini_with_retry(client, prompt, retries=3, delay=2):
                 contents=prompt,
             )
             return response.text.strip(), True
+            
         except APIError as e:
-            # Kiểm tra lỗi 503 (Unavailable) hoặc 429 (Rate limit)
-            if e.code in [503, 429] and attempt < retries - 1:
-                print(f"Gemini API đang bận ({e.code}). Thử lại sau {delay} giây... (Lần {attempt + 1}/{retries})")
+            # Lấy thông tin lỗi dưới dạng chuỗi để check cho chắc chắn
+            err_code = str(getattr(e, 'code', '') or '')
+            err_status = str(getattr(e, 'status', '') or '').upper()
+            err_message = str(e.message or '').upper()
+            
+            # Kiểm tra xem có phải lỗi quá tải/bận không (503, 429, UNAVAILABLE, RESOURCE_EXHAUSTED)
+            is_overloaded = (
+                "503" in err_code or 
+                "429" in err_code or 
+                "UNAVAILABLE" in err_status or 
+                "RESOURCE_EXHAUSTED" in err_status or
+                "TEMPORARY" in err_message
+            )
+            
+            if is_overloaded and attempt < retries - 1:
+                print(f"Gemini API đang bận (Status: {err_status or err_code}). Thử lại sau {delay} giây... (Lần {attempt + 1}/{retries})")
                 time.sleep(delay)
-                delay *= 2  # Tăng thời gian chờ cho lần sau (Exponential backoff)
-                continue
-            return f"Lỗi API ({e.code}): {e.message}", False
+                delay *= 2
+                continue  # Tiếp tục vòng lặp để thử lại
+                
+            # Nếu là lỗi khác (như 400, 403) hoặc đã hết lượt thử lại
+            return f"Lỗi API ({err_status or err_code}): {e.message}", False
+            
         except Exception as e:
             return f"Lỗi hệ thống: {str(e)}", False
+            
     return "Hết lượt thử lại do API quá tải.", False
 
 def main():
