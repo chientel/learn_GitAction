@@ -67,7 +67,61 @@ def main():
         3. Cách sửa lại cho đúng.
 
         Nếu đoạn code đã chuẩn convention, chỉ cần trả về đúng từ: "OK".
-        
+        code convention tiêu chuẩn của ngôn ngữ đó không (ví dụ: PEP8 cho Python, Clean Code, đặt tên biến, cấu trúc hàm, comment...).
+         Nếu đoạn code đã chuẩn convention, chỉ cần trả về đúng từ: "OK".
+        coding convention là gì? Đó là những quy tắc và hướng dẫn để viết code sạch, dễ đọc, dễ bảo trì và nhất quán trong một ngôn ngữ lập trình cụ thể. Ví dụ, đối với Python, có PEP8; đối với JavaScript, có Airbnb Style Guide; đối với Java, có Google Java Style Guide... Hãy áp dụng các quy tắc này khi đánh giá đoạn code thay đổi dưới đây:
+        theo chuẩn Common Standard Categories for C/C++
+Naming Conventions
+Formatting Conventions
+Style Guide Rules
+Code Layout Rules
+Commenting Standards
+Documentation Standards
+Whitespace Rules
+Indentation Rules
+Brace Style
+Line Breaking Rules
+Header Organization
+Include Order Rules
+Declaration Rules
+Initialization Rules
+Type Usage Rules
+Function Design Rules
+Class Design Rules
+Object Lifetime Rules
+Memory Management Rules
+Pointer Safety Rules
+Const Correctness
+Error Handling Conventions
+Exception Safety Rules
+Resource Management Rules
+Thread Safety Rules
+Concurrency Guidelines
+Macro Usage Rules
+Preprocessor Rules
+API Design Guidelines
+Encapsulation Rules
+Dependency Management Rules
+File Organization Rules
+Build System Conventions
+Testing Conventions
+Logging Conventions
+Security Coding Rules
+Defensive Programming Rules
+Performance Guidelines
+Portability Rules
+Embedded Coding Rules
+Static Analysis Compliance
+Compiler Warning Compliance
+Undefined Behavior Prevention
+Safe Integer Rules
+Synchronization Rules
+Atomic Operation Rules
+Coding Best Practices
+Readability Rules
+Maintainability Rules
+Clean Code Principles
+        Đoạn code thay đổi:
         Đoạn code thay đổi:
         ```
         {patch}
