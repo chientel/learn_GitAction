@@ -13,5 +13,7 @@ int main()
     int b = a + 10;
     int c = a * b;
     cout << "c = " << c << endl;  
+    int testVal = 9
+    cout << testVal;
     return 0;
 }
